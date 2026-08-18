@@ -5,12 +5,12 @@ import { useMemo, useState } from "react";
 import {
   ArrowLeft,
   CalendarDays,
+  ChevronDown,
   Clock,
   CreditCard,
   Mail,
   MapPin,
   Phone,
-  Search,
   Utensils,
   Users,
 } from "lucide-react";
@@ -24,7 +24,7 @@ type ReservationStatus =
   | "REJECTED"
   | string;
 
-type RestaurantReservation = {
+export type RestaurantReservation = {
   id: string;
   reservationCode: string;
   restaurantId: string;
@@ -70,8 +70,11 @@ type RestaurantReservation = {
   } | null;
 };
 
-type CustomerRestaurantReservationsClientProps = {
+export type CustomerRestaurantReservationsClientProps = {
   initialReservations: RestaurantReservation[];
+  searchQuery?: string;
+  statusFilter?: string;
+  sortBy?: string;
 };
 
 type ParsedReservationMenuLine = {
@@ -79,16 +82,6 @@ type ParsedReservationMenuLine = {
   quantity: string;
   amount: string;
 };
-
-const statusOptions = [
-  "ALL",
-  "PENDING",
-  "CONFIRMED",
-  "COMPLETED",
-  "CANCELLED",
-  "NO_SHOW",
-  "REJECTED",
-];
 
 function formatStatusLabel(status: string) {
   return status
@@ -290,36 +283,82 @@ function getReservationMenuDetails(reservation: RestaurantReservation) {
   };
 }
 
-export default function CustomerRestaurantReservationsClient({
+export function CustomerRestaurantReservationsSection({
   initialReservations,
+  searchQuery = "",
+  statusFilter = "all",
+  sortBy = "newest",
 }: CustomerRestaurantReservationsClientProps) {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [openReservationIds, setOpenReservationIds] = useState<
+    Record<string, boolean>
+  >({});
+  const [openMenuReservationIds, setOpenMenuReservationIds] = useState<
+    Record<string, boolean>
+  >({});
+
+  function toggleReservation(reservationId: string) {
+    setOpenReservationIds((current) => ({
+      ...current,
+      [reservationId]: !current[reservationId],
+    }));
+  }
+
+  function toggleMenuItems(reservationId: string) {
+    setOpenMenuReservationIds((current) => ({
+      ...current,
+      [reservationId]: !current[reservationId],
+    }));
+  }
 
   const reservations = useMemo(() => {
-    return initialReservations.filter((reservation) => {
-      const normalizedSearch = searchTerm.trim().toLowerCase();
-      const menuDetails = getReservationMenuDetails(reservation);
-      const menuSearchText = menuDetails.menuItems
-        .map((item) => `${item.foodPackage} ${item.quantity} ${item.amount}`)
-        .join(" ")
-        .toLowerCase();
+    let filtered = [...initialReservations];
 
-      const matchesSearch =
-        normalizedSearch.length === 0 ||
-        reservation.reservationCode.toLowerCase().includes(normalizedSearch) ||
-        reservation.restaurant.name.toLowerCase().includes(normalizedSearch) ||
-        getRestaurantLocation(reservation)
-          .toLowerCase()
-          .includes(normalizedSearch) ||
-        menuSearchText.includes(normalizedSearch);
+    if (searchQuery.trim()) {
+      const query = searchQuery.trim().toLowerCase();
 
-      const matchesStatus =
-        statusFilter === "ALL" || reservation.status === statusFilter;
+      filtered = filtered.filter((reservation) => {
+        const menuDetails = getReservationMenuDetails(reservation);
+        const menuSearchText = menuDetails.menuItems
+          .map((item) => `${item.foodPackage} ${item.quantity} ${item.amount}`)
+          .join(" ")
+          .toLowerCase();
 
-      return matchesSearch && matchesStatus;
-    });
-  }, [initialReservations, searchTerm, statusFilter]);
+        return (
+          reservation.reservationCode.toLowerCase().includes(query) ||
+          reservation.restaurant.name.toLowerCase().includes(query) ||
+          getRestaurantLocation(reservation).toLowerCase().includes(query) ||
+          menuSearchText.includes(query)
+        );
+      });
+    }
+
+    if (statusFilter !== "all") {
+      filtered = filtered.filter((reservation) => reservation.status === statusFilter);
+    }
+
+    switch (sortBy) {
+      case "newest":
+        filtered.sort(
+          (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+        break;
+      case "oldest":
+        filtered.sort(
+          (a, b) =>
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        );
+        break;
+      case "highest":
+        filtered.sort((a, b) => Number(b.amount || 0) - Number(a.amount || 0));
+        break;
+      case "lowest":
+        filtered.sort((a, b) => Number(a.amount || 0) - Number(b.amount || 0));
+        break;
+    }
+
+    return filtered;
+  }, [initialReservations, searchQuery, statusFilter, sortBy]);
 
   const summary = useMemo(() => {
     return {
@@ -337,36 +376,8 @@ export default function CustomerRestaurantReservationsClient({
   }, [initialReservations]);
 
   return (
-    <main className="min-h-screen bg-[#faf7f2]">
-      <section className="bg-[#15100c] px-4 py-10 text-white md:px-8 lg:px-12">
-        <div className="mx-auto max-w-7xl">
-          <Link
-            href="/"
-            className="mb-8 inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/20"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Home
-          </Link>
-
-          <div className="max-w-3xl">
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/50">
-              Customer Dashboard
-            </p>
-
-            <h1 className="mt-3 font-heading text-4xl font-semibold md:text-5xl">
-              My Restaurant Reservations
-            </h1>
-
-            <p className="mt-4 text-sm leading-7 text-white/70 md:text-base">
-              Review your restaurant table bookings, reservation status, table
-              details, selected menu items, amount, and restaurant contact
-              information.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <section className="mx-auto max-w-7xl px-4 py-8 md:px-8 lg:px-12">
+      <section>
+      <div className="mx-auto max-w-7xl py-8">
         <div className="grid gap-4 md:grid-cols-4">
           <div className="rounded-[1.5rem] bg-white p-5 shadow-sm ring-1 ring-black/5">
             <p className="text-sm text-gray-500">Total Reservations</p>
@@ -397,33 +408,7 @@ export default function CustomerRestaurantReservationsClient({
           </div>
         </div>
 
-        <div className="mt-8 rounded-[2rem] bg-white p-5 shadow-sm ring-1 ring-black/5">
-          <div className="grid gap-4 md:grid-cols-[1fr_220px]">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
 
-              <input
-                type="search"
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-                placeholder="Search by restaurant, location, menu item, or reservation code"
-                className="w-full rounded-full border border-gray-200 py-3 pl-11 pr-4 text-sm outline-none transition focus:border-gray-900"
-              />
-            </div>
-
-            <select
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
-              className="rounded-full border border-gray-200 px-4 py-3 text-sm outline-none transition focus:border-gray-900"
-            >
-              {statusOptions.map((status) => (
-                <option key={status} value={status}>
-                  {status === "ALL" ? "All Statuses" : formatStatusLabel(status)}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
 
         {reservations.length === 0 ? (
           <div className="mt-8 rounded-[2rem] bg-white p-10 text-center shadow-sm ring-1 ring-black/5">
@@ -510,69 +495,83 @@ export default function CustomerRestaurantReservationsClient({
                         </Link>
                       </div>
 
-                      <div className="mt-6 grid gap-4 md:grid-cols-5">
-                        <div className="rounded-2xl bg-[#faf7f2] p-4">
-                          <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-gray-400">
-                            <CalendarDays className="h-4 w-4" />
-                            Date
-                          </p>
+                      <div className="mt-6 overflow-hidden rounded-2xl border border-gray-200">
+                        <button
+                          type="button"
+                          onClick={() => toggleReservation(reservation.id)}
+                          aria-expanded={openReservationIds[reservation.id] === true}
+                          aria-controls={`reservation-details-${reservation.id}`}
+                          className="w-full bg-[#faf7f2] px-3 py-3 text-left transition-colors duration-200 hover:bg-[#f6f0e8] focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-inset md:px-4"
+                        >
+                          <div className="grid items-center gap-2 md:grid-cols-[1.2fr_1.4fr_1fr_1fr_1.2fr_auto] md:gap-3">
+                            <div className="min-w-0">
+                              <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400">
+                                <CalendarDays className="h-3.5 w-3.5 shrink-0" />
+                                Date
+                              </p>
+                              <p className="mt-1 truncate text-sm font-semibold text-gray-950">
+                                {formatDateLabel(reservation.reservationDate)}
+                              </p>
+                            </div>
 
-                          <p className="mt-2 font-semibold text-gray-950">
-                            {formatDateLabel(reservation.reservationDate)}
-                          </p>
-                        </div>
+                            <div className="min-w-0">
+                              <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400">
+                                <Clock className="h-3.5 w-3.5 shrink-0" />
+                                Time
+                              </p>
+                              <p className="mt-1 truncate text-sm font-semibold text-gray-950">
+                                {formatTimeLabel(reservation.startTime)} - {formatTimeLabel(reservation.endTime)}
+                              </p>
+                            </div>
 
-                        <div className="rounded-2xl bg-[#faf7f2] p-4">
-                          <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-gray-400">
-                            <Clock className="h-4 w-4" />
-                            Time
-                          </p>
+                            <div className="min-w-0">
+                              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400">
+                                Table
+                              </p>
+                              <p className="mt-1 truncate text-sm font-semibold text-gray-950">
+                                {reservation.table ? `Table ${reservation.table.tableNumber}` : "Not assigned"}
+                              </p>
+                            </div>
 
-                          <p className="mt-2 font-semibold text-gray-950">
-                            {formatTimeLabel(reservation.startTime)} -{" "}
-                            {formatTimeLabel(reservation.endTime)}
-                          </p>
-                        </div>
+                            <div className="min-w-0">
+                              <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400">
+                                <Users className="h-3.5 w-3.5 shrink-0" />
+                                Guest
+                              </p>
+                              <p className="mt-1 truncate text-sm font-semibold text-gray-950">
+                                {reservation.guests} guest{reservation.guests === 1 ? "" : "s"}
+                              </p>
+                            </div>
 
-                        <div className="rounded-2xl bg-[#faf7f2] p-4">
-                          <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-gray-400">
-                            <Users className="h-4 w-4" />
-                            Guests
-                          </p>
+                            <div className="min-w-0">
+                              <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400">
+                                <CreditCard className="h-3.5 w-3.5 shrink-0" />
+                                Amount
+                              </p>
+                              <p className="mt-1 truncate text-sm font-semibold text-gray-950">
+                                {formatAmount(reservation.currency, reservation.amount)}
+                              </p>
+                            </div>
 
-                          <p className="mt-2 font-semibold text-gray-950">
-                            {reservation.guests} guest
-                            {reservation.guests === 1 ? "" : "s"}
-                          </p>
-                        </div>
+                            <div className="flex justify-end">
+                              <ChevronDown
+                                className={`h-5 w-5 text-gray-500 transition-transform duration-300 ease-in-out ${
+                                  openReservationIds[reservation.id] ? "rotate-180" : "rotate-0"
+                                }`}
+                                aria-hidden="true"
+                              />
+                            </div>
+                          </div>
+                        </button>
 
-                        <div className="rounded-2xl bg-[#faf7f2] p-4">
-                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-400">
-                            Table
-                          </p>
-
-                          <p className="mt-2 font-semibold text-gray-950">
-                            {reservation.table
-                              ? `Table ${reservation.table.tableNumber}`
-                              : "Not assigned"}
-                          </p>
-                        </div>
-
-                        <div className="rounded-2xl bg-[#faf7f2] p-4">
-                          <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-gray-400">
-                            <CreditCard className="h-4 w-4" />
-                            Amount
-                          </p>
-
-                          <p className="mt-2 font-semibold text-gray-950">
-                            {formatAmount(
-                              reservation.currency,
-                              reservation.amount
-                            )}
-                          </p>
-                        </div>
-                      </div>
-
+                        <div
+                          id={`reservation-details-${reservation.id}`}
+                          className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${
+                            openReservationIds[reservation.id] ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                          }`}
+                        >
+                          <div className="min-h-0 overflow-hidden">
+                            <div className="border-t border-gray-100 bg-white pt-4">
                       {reservation.table ? (
                         <div className="mt-4 rounded-2xl border border-gray-100 p-4 text-sm text-gray-600">
                           Table capacity:{" "}
@@ -585,51 +584,81 @@ export default function CustomerRestaurantReservationsClient({
 
                       {menuDetails.menuItems.length > 0 ? (
                         <div className="mt-4 overflow-hidden rounded-2xl border border-gray-200">
-                          <div className="flex items-center gap-2 border-b border-gray-100 bg-gray-50 px-4 py-3">
-                            <Utensils className="h-4 w-4 text-gray-500" />
-                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
-                              Selected Menu Items
-                            </p>
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => toggleMenuItems(reservation.id)}
+                            aria-expanded={
+                              openMenuReservationIds[reservation.id] === true
+                            }
+                            aria-controls={`selected-menu-items-${reservation.id}`}
+                            className="flex w-full items-center justify-between gap-3 bg-gray-50 px-4 py-3 text-left transition-colors duration-200 hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-inset"
+                          >
+                            <span className="flex min-w-0 items-center gap-2">
+                              <Utensils className="h-4 w-4 shrink-0 text-gray-500" />
+                              <span className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
+                                Selected Menu Items
+                              </span>
+                            </span>
 
-                          <div className="overflow-x-auto">
-                            <table className="w-full min-w-[560px] text-left text-sm">
-                              <thead className="bg-white">
-                                <tr>
-                                  <th className="px-4 py-3 font-semibold text-gray-600">
-                                    Food Package
-                                  </th>
+                            <ChevronDown
+                              className={`h-4 w-4 shrink-0 text-gray-500 transition-transform duration-300 ease-in-out ${
+                                openMenuReservationIds[reservation.id]
+                                  ? "rotate-180"
+                                  : "rotate-0"
+                              }`}
+                              aria-hidden="true"
+                            />
+                          </button>
 
-                                  <th className="px-4 py-3 text-center font-semibold text-gray-600">
-                                    Quantity
-                                  </th>
+                          <div
+                            id={`selected-menu-items-${reservation.id}`}
+                            className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${
+                              openMenuReservationIds[reservation.id]
+                                ? "grid-rows-[1fr]"
+                                : "grid-rows-[0fr]"
+                            }`}
+                          >
+                            <div className="min-h-0 overflow-hidden">
+                              <div className="overflow-x-auto border-t border-gray-100 bg-white">
+                                <table className="w-full min-w-[560px] text-left text-sm">
+                                  <thead className="bg-white">
+                                    <tr>
+                                      <th className="px-4 py-3 font-semibold text-gray-600">
+                                        Food Package
+                                      </th>
 
-                                  <th className="px-4 py-3 text-right font-semibold text-gray-600">
-                                    Amount
-                                  </th>
-                                </tr>
-                              </thead>
+                                      <th className="px-4 py-3 text-center font-semibold text-gray-600">
+                                        Quantity
+                                      </th>
 
-                              <tbody className="divide-y divide-gray-100">
-                                {menuDetails.menuItems.map((item, index) => (
-                                  <tr
-                                    key={`${reservation.id}-${item.foodPackage}-${index}`}
-                                  >
-                                    <td className="px-4 py-3 font-medium text-gray-950">
-                                      {item.foodPackage}
-                                    </td>
+                                      <th className="px-4 py-3 text-right font-semibold text-gray-600">
+                                        Amount
+                                      </th>
+                                    </tr>
+                                  </thead>
 
-                                    <td className="px-4 py-3 text-center text-gray-700">
-                                      {item.quantity}
-                                    </td>
+                                  <tbody className="divide-y divide-gray-100">
+                                    {menuDetails.menuItems.map((item, index) => (
+                                      <tr
+                                        key={`${reservation.id}-${item.foodPackage}-${index}`}
+                                      >
+                                        <td className="px-4 py-3 font-medium text-gray-950">
+                                          {item.foodPackage}
+                                        </td>
 
-                                    <td className="px-4 py-3 text-right font-semibold text-gray-950">
-                                      {item.amount}
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
+                                        <td className="px-4 py-3 text-center text-gray-700">
+                                          {item.quantity}
+                                        </td>
+
+                                        <td className="px-4 py-3 text-right font-semibold text-gray-950">
+                                          {item.amount}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
                           </div>
                         </div>
                       ) : null}
@@ -663,6 +692,10 @@ export default function CustomerRestaurantReservationsClient({
                           </span>
                         ) : null}
                       </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </article>
@@ -670,7 +703,41 @@ export default function CustomerRestaurantReservationsClient({
             })}
           </div>
         )}
+      </div>
+    </section>
+  );
+}
+
+export default function CustomerRestaurantReservationsClient({
+  initialReservations,
+}: CustomerRestaurantReservationsClientProps) {
+  return (
+    <main className="min-h-screen bg-[#faf7f2]">
+      <section className="bg-[#15100c] px-4 py-10 text-white md:px-8 lg:px-12">
+        <div className="mx-auto max-w-7xl">
+          <Link
+            href="/"
+            className="mb-8 inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/20"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Home
+          </Link>
+          <div className="max-w-3xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/50">
+              Customer Dashboard
+            </p>
+            <h1 className="mt-3 font-heading text-4xl font-semibold md:text-5xl">
+              My Restaurant Reservations
+            </h1>
+            <p className="mt-4 text-sm leading-7 text-white/70 md:text-base">
+              Review your restaurant table bookings, reservation status, table
+              details, selected menu items, amount, and restaurant contact
+              information.
+            </p>
+          </div>
+        </div>
       </section>
+      <CustomerRestaurantReservationsSection initialReservations={initialReservations} />
     </main>
   );
 }

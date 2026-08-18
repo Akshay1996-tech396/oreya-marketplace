@@ -487,7 +487,7 @@ export default async function CheckoutSuccessPage({
 
               <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
                 <Link
-                  href="/customer/orders"
+                  href="/customer?section=orders"
                   className="rounded-full bg-black px-6 py-3 text-sm font-semibold text-white"
                 >
                   View My Orders
@@ -585,7 +585,7 @@ export default async function CheckoutSuccessPage({
               )}
 
               <Link
-                href="/customer/orders"
+                href="/customer?section=orders"
                 className="rounded-full border border-gray-300 px-6 py-3 text-sm font-semibold"
               >
                 View My Orders
@@ -638,7 +638,7 @@ export default async function CheckoutSuccessPage({
 
               <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
                 <Link
-                  href="/customer"
+                  href="/customer?section=bookings"
                   className="rounded-full bg-black px-6 py-3 text-sm font-semibold text-white"
                 >
                   View My Appointments
@@ -736,7 +736,7 @@ export default async function CheckoutSuccessPage({
               )}
 
               <Link
-                href="/customer"
+                href="/customer?section=bookings"
                 className="rounded-full border border-gray-300 px-6 py-3 text-sm font-semibold"
               >
                 View My Appointments
@@ -789,7 +789,7 @@ export default async function CheckoutSuccessPage({
 
               <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
                 <Link
-                  href="/customer/restaurant-reservations"
+                  href="/customer?section=restaurant-reservations"
                   className="rounded-full bg-black px-6 py-3 text-sm font-semibold text-white"
                 >
                   View My Reservations
@@ -887,7 +887,7 @@ export default async function CheckoutSuccessPage({
               )}
 
               <Link
-                href="/customer/restaurant-reservations"
+                href="/customer?section=restaurant-reservations"
                 className="rounded-full border border-gray-300 px-6 py-3 text-sm font-semibold"
               >
                 View My Reservations
@@ -1321,7 +1321,7 @@ export default async function CheckoutSuccessPage({
                   </Link>
 
                   <Link
-                    href="/customer"
+                    href="/customer?section=bookings"
                     className="flex w-full items-center justify-center rounded-full border border-gray-300 px-6 py-3 text-sm font-semibold hover:bg-gray-100"
                   >
                     View My Appointments
@@ -1754,7 +1754,7 @@ export default async function CheckoutSuccessPage({
                   </Link>
 
                   <Link
-                    href="/customer/restaurant-reservations"
+                    href="/customer?section=restaurant-reservations"
                     className="flex w-full items-center justify-center rounded-full border border-gray-300 px-6 py-3 text-sm font-semibold hover:bg-gray-100"
                   >
                     View My Reservations
@@ -2364,7 +2364,7 @@ export default async function CheckoutSuccessPage({
                 </Link>
 
                 <Link
-                  href="/customer/orders"
+                  href="/customer?section=orders"
                   className="flex w-full items-center justify-center rounded-full border border-gray-300 px-6 py-3 text-sm font-semibold hover:bg-gray-100"
                 >
                   View My Orders

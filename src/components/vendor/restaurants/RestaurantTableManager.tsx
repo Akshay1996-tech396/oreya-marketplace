@@ -33,6 +33,7 @@ type RestaurantSummary = {
 
 type RestaurantTableManagerProps = {
   restaurant: RestaurantSummary;
+  apiBasePath?: string;
 };
 
 type TableFormState = {
@@ -229,6 +230,7 @@ function ToggleInput({
 
 export default function RestaurantTableManager({
   restaurant,
+  apiBasePath = "/api/vendor/restaurants",
 }: RestaurantTableManagerProps) {
   const [tables, setTables] = useState<RestaurantTable[]>(restaurant.tables);
   const [formState, setFormState] =
@@ -345,8 +347,8 @@ export default function RestaurantTableManager({
 
     try {
       const endpoint = editingTableId
-        ? `/api/vendor/restaurants/${restaurant.id}/tables/${editingTableId}`
-        : `/api/vendor/restaurants/${restaurant.id}/tables`;
+        ? `${apiBasePath}/${restaurant.id}/tables/${editingTableId}`
+        : `${apiBasePath}/${restaurant.id}/tables`;
 
       const response = await fetch(endpoint, {
         method: editingTableId ? "PATCH" : "POST",
@@ -418,7 +420,7 @@ export default function RestaurantTableManager({
 
     try {
       const response = await fetch(
-        `/api/vendor/restaurants/${restaurant.id}/tables/${table.id}`,
+        `${apiBasePath}/${restaurant.id}/tables/${table.id}`,
         {
           method: "DELETE",
         }

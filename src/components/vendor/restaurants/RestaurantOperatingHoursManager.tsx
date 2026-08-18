@@ -39,6 +39,7 @@ type OperatingHourFormState = {
 
 type RestaurantOperatingHoursManagerProps = {
   restaurant: RestaurantSummary;
+  apiBasePath?: string;
 };
 
 const dayLabels = [
@@ -256,6 +257,7 @@ function SmallButton({
 
 export default function RestaurantOperatingHoursManager({
   restaurant,
+  apiBasePath = "/api/vendor/restaurants",
 }: RestaurantOperatingHoursManagerProps) {
   const [schedule, setSchedule] = useState<OperatingHourFormState[]>(() =>
     mergeInitialHours(restaurant.operatingHours)
@@ -384,7 +386,7 @@ export default function RestaurantOperatingHoursManager({
 
     try {
       const response = await fetch(
-        `/api/vendor/restaurants/${restaurant.id}/operating-hours`,
+        `${apiBasePath}/${restaurant.id}/operating-hours`,
         {
           method: "PUT",
           headers: {

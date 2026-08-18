@@ -57,6 +57,85 @@ export async function GET() {
       },
     });
 
+    const restaurantReservations = await prisma.restaurantReservation.findMany({
+      where: {
+        customerId: user.id,
+      },
+      orderBy: [
+        {
+          reservationDate: "desc",
+        },
+        {
+          startTime: "desc",
+        },
+      ],
+      include: {
+        restaurant: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            coverImage: true,
+            logo: true,
+            city: true,
+            area: true,
+            phone: true,
+            email: true,
+          },
+        },
+        table: {
+          select: {
+            id: true,
+            tableNumber: true,
+            capacity: true,
+            seatingArea: true,
+          },
+        },
+      },
+    });
+
+    const preparedRestaurantReservations = restaurantReservations.map(
+      (reservation) => ({
+        id: reservation.id,
+        reservationCode: reservation.reservationCode,
+        restaurantId: reservation.restaurantId,
+        tableId: reservation.tableId,
+        reservationDate: reservation.reservationDate.toISOString().slice(0, 10),
+        startTime: reservation.startTime,
+        endTime: reservation.endTime,
+        slotMinutes: reservation.slotMinutes,
+        guests: reservation.guests,
+        amount: reservation.amount ? reservation.amount.toString() : "0",
+        currency: reservation.currency,
+        status: reservation.status,
+        source: reservation.source,
+        paymentStatus: reservation.paymentStatus,
+        customerName: reservation.customerName,
+        customerEmail: reservation.customerEmail,
+        customerPhone: reservation.customerPhone,
+        customerNote: reservation.customerNote,
+        cancellationReason: reservation.cancelReason,
+        confirmedAt: reservation.confirmedAt
+          ? reservation.confirmedAt.toISOString()
+          : null,
+        cancelledAt: reservation.cancelledAt
+          ? reservation.cancelledAt.toISOString()
+          : null,
+        arrivedAt: null,
+        completedAt: reservation.completedAt
+          ? reservation.completedAt.toISOString()
+          : null,
+        noShowAt: reservation.noShowAt
+          ? reservation.noShowAt.toISOString()
+          : null,
+        createdAt: reservation.createdAt.toISOString(),
+        updatedAt: reservation.updatedAt.toISOString(),
+        restaurant: reservation.restaurant,
+        table: reservation.table,
+      })
+    );
+
+
     return NextResponse.json({
       user: {
         id: user.id,
@@ -66,6 +145,7 @@ export async function GET() {
       },
       orders,
       bookings,
+      restaurantReservations: preparedRestaurantReservations,
     });
   } catch (error) {
     console.error("Dashboard API error:", error);

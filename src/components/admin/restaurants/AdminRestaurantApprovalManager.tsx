@@ -1,19 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
+import Link from "next/link";
+import { useMemo, useState } from "react";
 import {
   Ban,
-  CalendarDays,
   CheckCircle2,
-  Clock,
-  Eye,
-  MapPin,
   PauseCircle,
+  PlayCircle,
   Search,
-  ShieldAlert,
-  Store,
-  Table2,
-  X,
   XCircle,
 } from "lucide-react";
 
@@ -21,54 +16,31 @@ type AdminRestaurant = {
   id: string;
   name: string;
   slug: string;
-  description: string | null;
   shortDescription: string | null;
-  phone: string | null;
-  email: string | null;
-  website: string | null;
   logo: string | null;
   coverImage: string | null;
   images: string[];
   cuisineTypes: string[];
-  priceForTwo: string | null;
-  currency: string;
-  address: string | null;
-  country: string | null;
-  state: string | null;
+  status: string;
   city: string | null;
   area: string | null;
-  status: string;
+  state: string | null;
   isTableReservationAvailable: boolean;
-  reservationSlotMinutes: number;
-  reservationAdvanceDays: number;
-  rejectedReason: string | null;
-  createdAt: string;
-  approvedAt: string | null;
   vendor: {
     id: string;
     businessName: string;
-    slug: string;
     status: string;
-    user: {
-      id: string;
-      name: string;
-      email: string;
-      phone: string | null;
-    };
+    user: { name: string | null; email: string };
   };
-  category: {
-    id: string;
-    name: string;
-    slug: string;
-  } | null;
   _count: {
+    operatingHours: number;
+    menuItems: number;
     tables: number;
     reservations: number;
-    reviews: number;
   };
 };
 
-type AdminRestaurantApprovalManagerProps = {
+type Props = {
   initialRestaurants?: AdminRestaurant[];
 };
 
@@ -79,169 +51,174 @@ type ActionType =
   | "INACTIVE"
   | "ACTIVE";
 
-const MAX_ACTION_REASON_LENGTH = 1000;
+const MAX_REASON = 1000;
 
-function statusBadgeClass(status: string) {
+const fallbackRestaurantImage =
+  "data:image/svg+xml;charset=UTF-8,%3Csvg%20width%3D%22900%22%20height%3D%22600%22%20viewBox%3D%220%200%20900%20600%22%20fill%3D%22none%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Crect%20width%3D%22900%22%20height%3D%22600%22%20fill%3D%22%23F4F1EC%22/%3E%3Ctext%20x%3D%22450%22%20y%3D%22305%22%20font-family%3D%22Arial%22%20font-size%3D%2238%22%20fill%3D%22%239A8A7A%22%20text-anchor%3D%22middle%22%3ERestaurant%3C/text%3E%3C/svg%3E";
+
+function normalizeRestaurantImage(value: string | null | undefined) {
+  if (!value) {
+    return fallbackRestaurantImage;
+  }
+
+  const imageValue = value.trim();
+
+  if (!imageValue) {
+    return fallbackRestaurantImage;
+  }
+
+  if (
+    imageValue.startsWith("http://") ||
+    imageValue.startsWith("https://") ||
+    imageValue.startsWith("/") ||
+    imageValue.startsWith("data:") ||
+    imageValue.startsWith("blob:")
+  ) {
+    return imageValue;
+  }
+
+  return `/uploads/restaurants/${imageValue}`;
+}
+
+function getRestaurantImage(
+  coverImage: string | null,
+  logo: string | null,
+  images: string[]
+) {
+  if (coverImage) {
+    return normalizeRestaurantImage(coverImage);
+  }
+
+  if (logo) {
+    return normalizeRestaurantImage(logo);
+  }
+
+  if (images[0]) {
+    return normalizeRestaurantImage(images[0]);
+  }
+
+  return fallbackRestaurantImage;
+}
+
+function formatLocation(
+  area: string | null,
+  city: string | null,
+  state: string | null
+) {
+  const location = [area, city, state].filter(Boolean).join(", ");
+
+  return location || "Location not added";
+}
+
+function formatStatusLabel(status: string) {
+  return status
+    .split("_")
+    .map((word) => word.charAt(0) + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function getStatusBadgeClass(status: string) {
   if (status === "ACTIVE" || status === "APPROVED") {
-    return "bg-green-50 text-green-700 ring-green-200";
-  }
-
-  if (status === "PENDING_APPROVAL") {
-    return "bg-yellow-50 text-yellow-700 ring-yellow-200";
-  }
-
-  if (status === "REJECTED" || status === "SUSPENDED") {
-    return "bg-red-50 text-red-700 ring-red-200";
+    return "border-green-200 bg-green-50 text-green-700 dark:border-green-500/20 dark:bg-green-500/10 dark:text-green-400";
   }
 
   if (status === "INACTIVE") {
-    return "bg-gray-50 text-gray-700 ring-gray-200";
+    return "border-gray-200 bg-gray-50 text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300";
   }
 
-  return "bg-blue-50 text-blue-700 ring-blue-200";
-}
+  if (status === "REJECTED" || status === "SUSPENDED") {
+    return "border-red-200 bg-red-50 text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400";
+  }
 
-function formatStatus(status: string) {
-  return status.replaceAll("_", " ");
-}
-
-function getRestaurantImage(restaurant: AdminRestaurant) {
-  return (
-    restaurant.coverImage ||
-    restaurant.logo ||
-    restaurant.images[0] ||
-    ""
-  );
-}
-
-function getRestaurantImages(restaurant: AdminRestaurant) {
-  return Array.from(
-    new Set(
-      [
-        restaurant.coverImage,
-        restaurant.logo,
-        ...restaurant.images,
-      ].filter((image): image is string => Boolean(image))
-    )
-  );
-}
-
-function getLocationText(restaurant: AdminRestaurant) {
-  return (
-    [restaurant.area, restaurant.city, restaurant.country]
-      .filter(Boolean)
-      .join(", ") || "Not added"
-  );
-}
-
-function normalizeRestaurant(restaurant: AdminRestaurant): AdminRestaurant {
-  return {
-    ...restaurant,
-    images: Array.isArray(restaurant.images) ? restaurant.images : [],
-    cuisineTypes: Array.isArray(restaurant.cuisineTypes)
-      ? restaurant.cuisineTypes
-      : [],
-    _count: {
-      tables: restaurant._count?.tables || 0,
-      reservations: restaurant._count?.reservations || 0,
-      reviews: restaurant._count?.reviews || 0,
-    },
-  };
+  return "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400";
 }
 
 export default function AdminRestaurantApprovalManager({
   initialRestaurants = [],
-}: AdminRestaurantApprovalManagerProps) {
-  const [restaurants, setRestaurants] = useState<AdminRestaurant[]>(() =>
-    initialRestaurants.map(normalizeRestaurant)
-  );
-
-  const [activeStatus, setActiveStatus] = useState("ALL");
+}: Props) {
+  const [restaurants, setRestaurants] = useState(initialRestaurants);
+  const [statusFilter, setStatusFilter] = useState("ALL");
   const [search, setSearch] = useState("");
-  const [selectedRestaurant, setSelectedRestaurant] =
-    useState<AdminRestaurant | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
-
-  const [actionModal, setActionModal] = useState<{
+  const [modal, setModal] = useState<{
     restaurant: AdminRestaurant;
     action: ActionType;
   } | null>(null);
-
   const [reason, setReason] = useState("");
 
-  useEffect(() => {
-    if (!selectedRestaurant && !actionModal) {
-      return;
-    }
-
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [selectedRestaurant, actionModal]);
-
-  const counts = useMemo(() => {
-    return {
+  const counts = useMemo(
+    () => ({
       all: restaurants.length,
-      pending: restaurants.filter((item) => item.status === "PENDING_APPROVAL")
-        .length,
-      active: restaurants.filter((item) => item.status === "ACTIVE").length,
-      rejected: restaurants.filter((item) => item.status === "REJECTED").length,
-      suspended: restaurants.filter((item) => item.status === "SUSPENDED")
-        .length,
-      inactive: restaurants.filter((item) => item.status === "INACTIVE").length,
-    };
-  }, [restaurants]);
+      pending: restaurants.filter(
+        (restaurant) => restaurant.status === "PENDING_APPROVAL"
+      ).length,
+      active: restaurants.filter(
+        (restaurant) =>
+          restaurant.status === "ACTIVE" ||
+          restaurant.status === "APPROVED"
+      ).length,
+      rejected: restaurants.filter(
+        (restaurant) => restaurant.status === "REJECTED"
+      ).length,
+      suspended: restaurants.filter(
+        (restaurant) => restaurant.status === "SUSPENDED"
+      ).length,
+      inactive: restaurants.filter(
+        (restaurant) => restaurant.status === "INACTIVE"
+      ).length,
+    }),
+    [restaurants]
+  );
 
   const filteredRestaurants = useMemo(() => {
+    const query = search.trim().toLowerCase();
+
     return restaurants.filter((restaurant) => {
       const matchesStatus =
-        activeStatus === "ALL" || restaurant.status === activeStatus;
-
-      const searchValue = search.toLowerCase().trim();
+        statusFilter === "ALL" ||
+        restaurant.status === statusFilter ||
+        (statusFilter === "ACTIVE" &&
+          restaurant.status === "APPROVED");
 
       const matchesSearch =
-        !searchValue ||
-        restaurant.name.toLowerCase().includes(searchValue) ||
-        restaurant.vendor.businessName.toLowerCase().includes(searchValue) ||
-        restaurant.vendor.user.email.toLowerCase().includes(searchValue) ||
-        (restaurant.city || "").toLowerCase().includes(searchValue) ||
-        (restaurant.area || "").toLowerCase().includes(searchValue);
+        !query ||
+        restaurant.name.toLowerCase().includes(query) ||
+        restaurant.vendor.businessName.toLowerCase().includes(query) ||
+        restaurant.vendor.user.email.toLowerCase().includes(query) ||
+        formatLocation(
+          restaurant.area,
+          restaurant.city,
+          restaurant.state
+        )
+          .toLowerCase()
+          .includes(query);
 
       return matchesStatus && matchesSearch;
     });
-  }, [restaurants, activeStatus, search]);
+  }, [restaurants, search, statusFilter]);
 
-  async function runAction(
-    restaurant: AdminRestaurant,
-    action: ActionType
-  ) {
-    const normalizedReason = reason.trim();
-    const requiresReason =
-      action === "REJECT" || action === "SUSPEND";
-
-    if (requiresReason && !normalizedReason) {
-      alert("A reason is required for this action.");
+  async function executeAction() {
+    if (!modal) {
       return;
     }
 
-    if (
-      normalizedReason.length >
-      MAX_ACTION_REASON_LENGTH
-    ) {
-      alert(
-        "The action reason cannot exceed 1,000 characters."
-      );
+    const needsReason =
+      modal.action === "REJECT" || modal.action === "SUSPEND";
+    const cleanReason = reason.trim();
+
+    if (needsReason && !cleanReason) {
+      return;
+    }
+
+    if (cleanReason.length > MAX_REASON) {
       return;
     }
 
     try {
-      setProcessingId(restaurant.id);
+      setProcessingId(modal.restaurant.id);
 
       const response = await fetch(
-        `/api/admin/restaurants/${restaurant.id}`,
+        `/api/admin/restaurants/${modal.restaurant.id}`,
         {
           method: "PATCH",
           headers: {
@@ -249,679 +226,526 @@ export default function AdminRestaurantApprovalManager({
           },
           credentials: "include",
           body: JSON.stringify({
-            action,
-            reason: normalizedReason,
+            action: modal.action,
+            reason: cleanReason,
           }),
         }
       );
 
-      const data = await response
-        .json()
-        .catch(() => null);
+      const data = await response.json().catch(() => null);
 
       if (!response.ok || !data?.success) {
         alert(
           data?.message ||
-            "Unable to update the restaurant status."
+            "Unable to update restaurant status."
         );
         return;
       }
 
-      let updatedRestaurant: AdminRestaurant | null = null;
-
       setRestaurants((currentRestaurants) =>
-        currentRestaurants.map((item) => {
-          if (item.id !== restaurant.id) {
-            return item;
-          }
-
-          updatedRestaurant = normalizeRestaurant({
-            ...item,
-            ...data.restaurant,
-            priceForTwo:
-              data.restaurant?.priceForTwo !==
-                null &&
-              data.restaurant?.priceForTwo !==
-                undefined
-                ? String(
-                    data.restaurant.priceForTwo
-                  )
-                : item.priceForTwo,
-            createdAt:
-              data.restaurant?.createdAt ||
-              item.createdAt,
-            approvedAt:
-              data.restaurant?.approvedAt ??
-              item.approvedAt,
-            _count:
-              data.restaurant?._count ||
-              item._count,
-          });
-
-          return updatedRestaurant;
-        })
+        currentRestaurants.map((restaurant) =>
+          restaurant.id === modal.restaurant.id
+            ? {
+                ...restaurant,
+                status:
+                  data.restaurant?.status ??
+                  restaurant.status,
+              }
+            : restaurant
+        )
       );
 
-      setSelectedRestaurant((currentRestaurant) => {
-        if (
-          !currentRestaurant ||
-          currentRestaurant.id !== restaurant.id ||
-          !updatedRestaurant
-        ) {
-          return currentRestaurant;
-        }
-
-        return updatedRestaurant;
-      });
-
-      setActionModal(null);
+      setModal(null);
       setReason("");
     } catch (error) {
       console.error(
         "ADMIN_RESTAURANT_ACTION_ERROR",
         error
       );
-
       alert(
-        "Unable to update the restaurant status. Please try again."
+        "Unable to update restaurant status. Please try again."
       );
     } finally {
       setProcessingId(null);
     }
   }
 
-  function openActionModal(restaurant: AdminRestaurant, action: ActionType) {
+  function openAction(
+    restaurant: AdminRestaurant,
+    action: ActionType
+  ) {
     setReason("");
-    setActionModal({
-      restaurant,
-      action,
-    });
+    setModal({ restaurant, action });
   }
 
-  function actionTitle(action: ActionType) {
-    if (action === "APPROVE") return "Approve Restaurant";
-    if (action === "REJECT") return "Reject Restaurant";
-    if (action === "SUSPEND") return "Suspend Restaurant";
-    if (action === "INACTIVE") return "Set Restaurant Inactive";
-    return "Activate Restaurant";
-  }
-
-  function actionButtonText(action: ActionType) {
-    if (action === "APPROVE") return "Approve and Activate";
-    if (action === "REJECT") return "Reject";
-    if (action === "SUSPEND") return "Suspend";
-    if (action === "INACTIVE") return "Set Inactive";
-    return "Activate";
-  }
+  const filterCards = [
+    ["ALL", "All", counts.all],
+    ["PENDING_APPROVAL", "Pending", counts.pending],
+    ["ACTIVE", "Active", counts.active],
+    ["REJECTED", "Rejected", counts.rejected],
+    ["SUSPENDED", "Suspended", counts.suspended],
+    ["INACTIVE", "Inactive", counts.inactive],
+  ] as const;
 
   return (
-    <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
-        <button
-          type="button"
-          onClick={() => setActiveStatus("ALL")}
-          className={`rounded-2xl border p-4 text-left ${
-            activeStatus === "ALL"
-              ? "border-black bg-black text-white"
-              : "border-gray-200 bg-white text-gray-900"
-          }`}
-        >
-          <p className="text-sm opacity-70">All</p>
-          <p className="mt-2 text-2xl font-bold">{counts.all}</p>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveStatus("PENDING_APPROVAL")}
-          className={`rounded-2xl border p-4 text-left ${
-            activeStatus === "PENDING_APPROVAL"
-              ? "border-black bg-black text-white"
-              : "border-gray-200 bg-white text-gray-900"
-          }`}
-        >
-          <p className="text-sm opacity-70">Pending</p>
-          <p className="mt-2 text-2xl font-bold">{counts.pending}</p>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveStatus("ACTIVE")}
-          className={`rounded-2xl border p-4 text-left ${
-            activeStatus === "ACTIVE"
-              ? "border-black bg-black text-white"
-              : "border-gray-200 bg-white text-gray-900"
-          }`}
-        >
-          <p className="text-sm opacity-70">Active</p>
-          <p className="mt-2 text-2xl font-bold">{counts.active}</p>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveStatus("REJECTED")}
-          className={`rounded-2xl border p-4 text-left ${
-            activeStatus === "REJECTED"
-              ? "border-black bg-black text-white"
-              : "border-gray-200 bg-white text-gray-900"
-          }`}
-        >
-          <p className="text-sm opacity-70">Rejected</p>
-          <p className="mt-2 text-2xl font-bold">{counts.rejected}</p>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveStatus("SUSPENDED")}
-          className={`rounded-2xl border p-4 text-left ${
-            activeStatus === "SUSPENDED"
-              ? "border-black bg-black text-white"
-              : "border-gray-200 bg-white text-gray-900"
-          }`}
-        >
-          <p className="text-sm opacity-70">Suspended</p>
-          <p className="mt-2 text-2xl font-bold">{counts.suspended}</p>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveStatus("INACTIVE")}
-          className={`rounded-2xl border p-4 text-left ${
-            activeStatus === "INACTIVE"
-              ? "border-black bg-black text-white"
-              : "border-gray-200 bg-white text-gray-900"
-          }`}
-        >
-          <p className="text-sm opacity-70">Inactive</p>
-          <p className="mt-2 text-2xl font-bold">{counts.inactive}</p>
-        </button>
+    <div>
+      <div className="mb-5 grid grid-cols-2 gap-3 xl:grid-cols-6">
+        {filterCards.map(([value, label, count]) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setStatusFilter(value)}
+            className={`rounded-xl border p-4 text-left shadow-sm transition ${
+              statusFilter === value
+                ? "border-gray-900 bg-gray-900 text-white"
+                : "border-gray-200 bg-white text-gray-800 hover:border-gray-300 dark:border-gray-800 dark:bg-white/[0.03] dark:text-white"
+            }`}
+          >
+            <p className="text-sm opacity-80">{label}</p>
+            <p className="mt-1 text-2xl font-semibold">
+              {count}
+            </p>
+          </button>
+        ))}
       </div>
 
-      <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="relative min-w-[260px] flex-1">
-            <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+      <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-gray-200 bg-white p-3 shadow-sm sm:flex-row dark:border-gray-800 dark:bg-white/[0.03]">
+        <Link
+          href="/admin/restaurants/add"
+          className="inline-flex items-center justify-center rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-brand-600"
+        >
+          Add Restaurant
+        </Link>
 
-            <input
-              type="search"
-              aria-label="Search restaurants"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search restaurant, vendor, city, or area..."
-              className="h-11 w-full rounded-full border border-gray-200 bg-gray-50 pl-11 pr-4 text-sm outline-none focus:border-black"
-            />
-          </div>
+        <div className="relative flex-1">
+          <Search
+            className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
+            aria-hidden="true"
+          />
+          <input
+            value={search}
+            onChange={(event) =>
+              setSearch(event.target.value)
+            }
+            placeholder="Search restaurant, vendor, city, or area..."
+            className="h-11 w-full rounded-lg border border-gray-200 bg-white pl-10 pr-4 text-sm outline-none focus:border-gray-400 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+          />
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-        {filteredRestaurants.length === 0 ? (
-          <div className="flex min-h-[320px] flex-col items-center justify-center p-8 text-center">
-            <Store className="mb-4 h-12 w-12 text-gray-400" />
-
-            <h3 className="text-lg font-bold text-gray-950">
-              No restaurants found
-            </h3>
-
-            <p className="mt-2 text-sm text-gray-500">
-              No restaurants match the selected filter or search term.
-            </p>
+      {filteredRestaurants.length === 0 ? (
+        <section className="rounded-2xl border border-dashed border-gray-300 bg-white px-5 py-16 text-center shadow-sm dark:border-gray-700 dark:bg-white/[0.03]">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gray-100 text-3xl dark:bg-gray-800">
+            🍽️
           </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
-              <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
-                <tr>
-                  <th className="px-5 py-4">Restaurant</th>
-                  <th className="px-5 py-4">Vendor</th>
-                  <th className="px-5 py-4">Location</th>
-                  <th className="px-5 py-4">Reservations</th>
-                  <th className="px-5 py-4">Status</th>
-                  <th className="px-5 py-4 text-right">Action</th>
-                </tr>
-              </thead>
 
-              <tbody className="divide-y divide-gray-100 bg-white">
-                {filteredRestaurants.map((restaurant) => {
-                  const image = getRestaurantImage(restaurant);
+          <h2 className="text-lg font-semibold text-gray-800 dark:text-white/90">
+            No restaurants found
+          </h2>
 
-                  return (
-                    <tr key={restaurant.id} className="hover:bg-gray-50">
-                      <td className="px-5 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="h-16 w-16 overflow-hidden rounded-2xl bg-gray-100">
-                            {image ? (
-                              <img
-                                src={image}
-                                alt={restaurant.name}
-                                className="h-full w-full object-cover"
-                              />
-                            ) : (
-                              <div className="flex h-full w-full items-center justify-center">
-                                <Store className="h-6 w-6 text-gray-400" />
-                              </div>
+          <p className="mx-auto mt-2 max-w-md text-sm text-gray-500 dark:text-gray-400">
+            Try another search or status filter, or add a
+            new restaurant.
+          </p>
+
+          <Link
+            href="/admin/restaurants/add"
+            className="mt-6 inline-flex items-center justify-center rounded-lg bg-gray-900 px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-brand-600"
+          >
+            Add Restaurant
+          </Link>
+        </section>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 2xl:gap-6">
+          {filteredRestaurants.map((restaurant) => {
+            const imageUrl = getRestaurantImage(
+              restaurant.coverImage,
+              restaurant.logo,
+              restaurant.images
+            );
+
+            return (
+              <article
+                key={restaurant.id}
+                className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-white/[0.03]"
+              >
+                <div className="grid grid-cols-1 xl:grid-cols-[160px_minmax(0,1fr)] 2xl:grid-cols-[280px_minmax(0,1fr)]">
+                  <div className="relative h-52 bg-gray-100 dark:bg-gray-800 xl:h-full">
+                    <img
+                      src={imageUrl}
+                      alt={restaurant.name}
+                      className="h-full w-full object-cover"
+                    />
+                  </div>
+
+                  <div className="min-w-0 p-4 xl:p-2.5 2xl:p-5">
+                    <div className="grid grid-cols-1 gap-2 xl:grid-cols-[minmax(0,1fr)_220px] xl:items-start 2xl:flex 2xl:flex-row 2xl:items-start 2xl:justify-between 2xl:gap-5">
+                      <div className="min-w-0">
+                        <div className="mb-1.5 flex flex-wrap items-center gap-1.5 2xl:mb-3 2xl:gap-2">
+                          <span
+                            className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium xl:px-1.5 xl:py-0.5 xl:text-[10px] 2xl:px-2.5 2xl:py-1 2xl:text-xs ${getStatusBadgeClass(
+                              restaurant.status
+                            )}`}
+                          >
+                            {formatStatusLabel(
+                              restaurant.status
+                            )}
+                          </span>
+
+                          <span
+                            className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium xl:px-1.5 xl:py-0.5 xl:text-[10px] 2xl:px-2.5 2xl:py-1 2xl:text-xs ${
+                              restaurant.isTableReservationAvailable
+                                ? "border-green-200 bg-green-50 text-green-700 dark:border-green-500/20 dark:bg-green-500/10 dark:text-green-400"
+                                : "border-red-200 bg-red-50 text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400"
+                            }`}
+                          >
+                            {restaurant.isTableReservationAvailable
+                              ? "Reservations Enabled"
+                              : "Reservations Disabled"}
+                          </span>
+                        </div>
+
+                        <h2 className="text-lg font-semibold text-gray-800 dark:text-white/90 xl:text-base 2xl:text-xl">
+                          {restaurant.name}
+                        </h2>
+
+                        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 xl:mt-0.5 xl:text-xs 2xl:mt-1 2xl:text-sm">
+                          {formatLocation(
+                            restaurant.area,
+                            restaurant.city,
+                            restaurant.state
+                          )}
+                        </p>
+
+                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                          Vendor:{" "}
+                          <span className="font-medium text-gray-700 dark:text-gray-300">
+                            {restaurant.vendor.businessName}
+                          </span>
+                        </p>
+
+                        {restaurant.shortDescription ? (
+                          <p className="mt-2 max-w-3xl text-sm leading-5 text-gray-600 dark:text-gray-300 xl:mt-1 xl:overflow-hidden xl:text-ellipsis xl:whitespace-nowrap xl:text-xs xl:leading-4 2xl:mt-3 2xl:overflow-visible 2xl:whitespace-normal 2xl:text-sm 2xl:leading-6">
+                            {restaurant.shortDescription}
+                          </p>
+                        ) : null}
+
+                        {restaurant.cuisineTypes.length > 0 ? (
+                          <div className="mt-2 flex flex-wrap gap-1.5 xl:mt-1 2xl:mt-3 2xl:gap-2">
+                            {restaurant.cuisineTypes.map(
+                              (cuisine) => (
+                                <span
+                                  key={cuisine}
+                                  className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-0.5 text-[11px] font-medium text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 xl:px-2 xl:text-[10px] 2xl:px-3 2xl:py-1 2xl:text-xs"
+                                >
+                                  {cuisine}
+                                </span>
+                              )
                             )}
                           </div>
+                        ) : null}
+                      </div>
 
-                          <div>
-                            <p className="font-semibold text-gray-950">
-                              {restaurant.name}
-                            </p>
+                      <div className="grid w-full grid-cols-2 gap-1.5 text-center sm:grid-cols-4 xl:grid-cols-2 2xl:w-auto 2xl:min-w-[430px] 2xl:grid-cols-4 2xl:gap-3">
+                        <Stat
+                          value={restaurant._count.operatingHours}
+                          label="Open Days"
+                        />
+                        <Stat
+                          value={restaurant._count.menuItems}
+                          label="Menus"
+                        />
+                        <Stat
+                          value={restaurant._count.tables}
+                          label="Tables"
+                        />
+                        <Stat
+                          value={restaurant._count.reservations}
+                          label="Reservations"
+                        />
+                      </div>
+                    </div>
 
-                            <p className="mt-1 line-clamp-1 max-w-[280px] text-xs text-gray-500">
-                              {restaurant.shortDescription ||
-                                restaurant.description ||
-                                "No description added"}
-                            </p>
+                    <div className="mt-2 grid grid-cols-1 gap-1.5 border-t border-gray-200 pt-2 dark:border-gray-800 sm:grid-cols-2 xl:grid-cols-6 2xl:mt-5 2xl:gap-3 2xl:pt-5">
+                      <ActionLink
+                        href={`/admin/restaurants/${restaurant.id}/edit`}
+                        label="Edit Restaurant"
+                      />
 
-                            <p className="mt-1 text-[11px] text-gray-400">
-                              /{restaurant.slug}
-                            </p>
-                          </div>
-                        </div>
-                      </td>
+                      <ActionLink
+                        href={`/admin/restaurants/${restaurant.id}/menu`}
+                        label="Manage Menu"
+                        className="inline-flex min-h-8 items-center justify-center rounded-lg bg-amber-500 px-1.5 py-1.5 text-center text-[10px] font-medium leading-tight text-white shadow-sm hover:bg-amber-600 2xl:px-4 2xl:py-2.5 2xl:text-sm"
+                      />
 
-                      <td className="px-5 py-4">
-                        <p className="font-medium text-gray-900">
-                          {restaurant.vendor.businessName}
-                        </p>
+                      <ActionLink
+                        href={`/admin/restaurants/${restaurant.id}/hours`}
+                        label="Operating Hours"
+                        className="inline-flex min-h-8 items-center justify-center rounded-lg bg-gray-100 px-1.5 py-1.5 text-center text-[10px] font-medium leading-tight text-gray-700 shadow-sm hover:bg-gray-200 2xl:px-4 2xl:py-2.5 2xl:text-sm"
+                      />
 
-                        <p className="mt-1 text-xs text-gray-500">
-                          {restaurant.vendor.user.email}
-                        </p>
-                      </td>
+                      <ActionLink
+                        href={`/admin/restaurants/${restaurant.id}/tables`}
+                        label="Tables"
+                        className="inline-flex min-h-8 items-center justify-center rounded-lg bg-gray-900 px-1.5 py-1.5 text-center text-[10px] font-medium leading-tight text-white shadow-sm hover:bg-gray-800 dark:bg-white dark:text-gray-900 2xl:px-4 2xl:py-2.5 2xl:text-sm"
+                      />
 
-                      <td className="px-5 py-4 text-gray-600">
-                        <div className="flex items-start gap-2">
-                          <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
+                      <ActionLink
+                        href="/admin/restaurant-reservations"
+                        label="Reservations"
+                      />
 
-                          <span>{getLocationText(restaurant)}</span>
-                        </div>
-                      </td>
-
-                      <td className="px-5 py-4 text-gray-700">
-                        <div className="space-y-1">
-                          <p className="flex items-center gap-2">
-                            <Table2 className="h-4 w-4 text-gray-400" />
-                            {restaurant._count.tables} table
-                            {restaurant._count.tables === 1 ? "" : "s"}
-                          </p>
-
-                          <p className="flex items-center gap-2 text-xs text-gray-500">
-                            <CalendarDays className="h-3.5 w-3.5" />
-                            {restaurant._count.reservations} reservation
-                            {restaurant._count.reservations === 1 ? "" : "s"}
-                          </p>
-
-                          <p className="flex items-center gap-2 text-xs text-gray-500">
-                            <Clock className="h-3.5 w-3.5" />
-                            {restaurant.reservationSlotMinutes} minute slots
-                          </p>
-                        </div>
-                      </td>
-
-                      <td className="px-5 py-4">
-                        <span
-                          className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ${statusBadgeClass(
-                            restaurant.status
-                          )}`}
-                        >
-                          {formatStatus(restaurant.status)}
-                        </span>
-
-                        {restaurant.rejectedReason && (
-                          <p className="mt-1 line-clamp-1 max-w-[180px] text-xs text-red-500">
-                            {restaurant.rejectedReason}
-                          </p>
-                        )}
-                      </td>
-
-                      <td className="px-5 py-4">
-                        <div className="flex justify-end gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setSelectedRestaurant(restaurant)}
-                            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-gray-300 text-gray-700 transition hover:bg-gray-100"
-                            aria-label="View restaurant"
-                          >
-                            <Eye size={15} />
-                          </button>
-
-                          {restaurant.status === "PENDING_APPROVAL" && (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  openActionModal(restaurant, "APPROVE")
-                                }
-                                disabled={processingId === restaurant.id}
-                                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-green-200 text-green-700 transition hover:bg-green-50 disabled:opacity-50"
-                                aria-label="Approve restaurant"
-                              >
-                                <CheckCircle2 size={16} />
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  openActionModal(restaurant, "REJECT")
-                                }
-                                disabled={processingId === restaurant.id}
-                                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-red-200 text-red-600 transition hover:bg-red-50 disabled:opacity-50"
-                                aria-label="Reject restaurant"
-                              >
-                                <XCircle size={16} />
-                              </button>
-                            </>
-                          )}
-
-                          {restaurant.status === "ACTIVE" && (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  openActionModal(restaurant, "INACTIVE")
-                                }
-                                disabled={processingId === restaurant.id}
-                                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-gray-300 text-gray-700 transition hover:bg-gray-100 disabled:opacity-50"
-                                aria-label="Set inactive"
-                              >
-                                <PauseCircle size={16} />
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  openActionModal(restaurant, "SUSPEND")
-                                }
-                                disabled={processingId === restaurant.id}
-                                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-red-200 text-red-600 transition hover:bg-red-50 disabled:opacity-50"
-                                aria-label="Suspend restaurant"
-                              >
-                                <Ban size={16} />
-                              </button>
-                            </>
-                          )}
-
-                          {(restaurant.status === "INACTIVE" ||
-                            restaurant.status === "REJECTED" ||
-                            restaurant.status === "SUSPENDED") && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                openActionModal(restaurant, "ACTIVE")
-                              }
-                              disabled={processingId === restaurant.id}
-                              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-green-200 text-green-700 transition hover:bg-green-50 disabled:opacity-50"
-                              aria-label="Activate restaurant"
-                            >
-                              <CheckCircle2 size={16} />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {selectedRestaurant && (
-        <div className="fixed inset-0 z-[9999] overflow-y-auto bg-black/40 p-4">
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="restaurant-preview-title"
-            className="mx-auto mt-8 max-h-[90vh] max-w-3xl overflow-y-auto rounded-3xl bg-white shadow-2xl"
-          >
-            <div className="flex items-center justify-between border-b border-gray-200 p-5">
-              <div>
-                <h3 id="restaurant-preview-title" className="text-xl font-bold text-gray-950">
-                  {selectedRestaurant.name}
-                </h3>
-
-                <p className="text-sm text-gray-500">
-                  Restaurant details preview
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setSelectedRestaurant(null)}
-                className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 transition hover:bg-gray-200"
-                aria-label="Close restaurant details"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            {getRestaurantImages(
-              selectedRestaurant
-            ).length > 0 ? (
-              <div className="border-b border-gray-200 p-5">
-                <p className="mb-3 text-sm font-semibold text-gray-700">
-                  Restaurant Images
-                </p>
-
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                  {getRestaurantImages(
-                    selectedRestaurant
-                  ).map((image, index) => (
-                    <div
-                      key={`${image}-${index}`}
-                      className="overflow-hidden rounded-2xl bg-gray-100"
-                    >
-                      <img
-                        src={image}
-                        alt={`${selectedRestaurant.name} image ${index + 1}`}
-                        className="h-36 w-full object-cover"
+                      <ActionLink
+                        href={`/restaurants/${restaurant.slug}`}
+                        label="View Public Page"
+                        target="_blank"
                       />
                     </div>
-                  ))}
+
+                    <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-2 dark:border-gray-800 2xl:mt-3">
+                      <span className="mr-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                        Admin Controls
+                      </span>
+
+                      {restaurant.status ===
+                      "PENDING_APPROVAL" ? (
+                        <>
+                          <AdminButton
+                            title="Approve"
+                            onClick={() =>
+                              openAction(
+                                restaurant,
+                                "APPROVE"
+                              )
+                            }
+                            icon={
+                              <CheckCircle2 className="h-4 w-4" />
+                            }
+                          />
+                          <AdminButton
+                            title="Reject"
+                            danger
+                            onClick={() =>
+                              openAction(
+                                restaurant,
+                                "REJECT"
+                              )
+                            }
+                            icon={
+                              <XCircle className="h-4 w-4" />
+                            }
+                          />
+                        </>
+                      ) : null}
+
+                      {restaurant.status === "ACTIVE" ||
+                      restaurant.status === "APPROVED" ? (
+                        <AdminButton
+                          title="Pause / Suspend"
+                          onClick={() =>
+                            openAction(
+                              restaurant,
+                              "SUSPEND"
+                            )
+                          }
+                          icon={
+                            <PauseCircle className="h-4 w-4" />
+                          }
+                        />
+                      ) : null}
+
+                      {restaurant.status === "SUSPENDED" ||
+                      restaurant.status === "REJECTED" ||
+                      restaurant.status === "INACTIVE" ? (
+                        <AdminButton
+                          title="Activate"
+                          onClick={() =>
+                            openAction(
+                              restaurant,
+                              "ACTIVE"
+                            )
+                          }
+                          icon={
+                            <PlayCircle className="h-4 w-4" />
+                          }
+                        />
+                      ) : null}
+
+                      {restaurant.status !== "INACTIVE" &&
+                      restaurant.status !== "SUSPENDED" ? (
+                        <AdminButton
+                          title="Set Inactive"
+                          danger
+                          onClick={() =>
+                            openAction(
+                              restaurant,
+                              "INACTIVE"
+                            )
+                          }
+                          icon={
+                            <Ban className="h-4 w-4" />
+                          }
+                        />
+                      ) : null}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ) : null}
-
-            <div className="space-y-5 p-5">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="rounded-2xl bg-gray-50 p-4">
-                  <p className="text-sm font-semibold text-gray-700">
-                    Short Description
-                  </p>
-
-                  <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-gray-600">
-                    {selectedRestaurant.shortDescription ||
-                      "No short description added"}
-                  </p>
-                </div>
-
-                <div className="rounded-2xl bg-gray-50 p-4">
-                  <p className="text-sm font-semibold text-gray-700">
-                    Full Description
-                  </p>
-
-                  <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-gray-600">
-                    {selectedRestaurant.description ||
-                      "No description added"}
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="rounded-2xl bg-gray-50 p-4">
-                  <p className="text-sm font-semibold text-gray-700">Vendor</p>
-
-                  <p className="mt-1 text-sm text-gray-600">
-                    {selectedRestaurant.vendor.businessName}
-                  </p>
-
-                  <p className="text-xs text-gray-500">
-                    {selectedRestaurant.vendor.user.email}
-                  </p>
-                </div>
-
-                <div className="rounded-2xl bg-gray-50 p-4">
-                  <p className="text-sm font-semibold text-gray-700">
-                    Location
-                  </p>
-
-                  <p className="mt-1 text-sm text-gray-600">
-                    {[
-                      selectedRestaurant.address,
-                      selectedRestaurant.area,
-                      selectedRestaurant.city,
-                      selectedRestaurant.country,
-                    ]
-                      .filter(Boolean)
-                      .join(", ") || "Not added"}
-                  </p>
-                </div>
-
-                <div className="rounded-2xl bg-gray-50 p-4">
-                  <p className="text-sm font-semibold text-gray-700">Cuisine</p>
-
-                  <p className="mt-1 text-sm text-gray-600">
-                    {selectedRestaurant.cuisineTypes.length > 0
-                      ? selectedRestaurant.cuisineTypes.join(", ")
-                      : "Not added"}
-                  </p>
-                </div>
-
-                <div className="rounded-2xl bg-gray-50 p-4">
-                  <p className="text-sm font-semibold text-gray-700">
-                    Table Reservation
-                  </p>
-
-                  <p className="mt-1 text-sm text-gray-600">
-                    {selectedRestaurant.isTableReservationAvailable
-                      ? "Available"
-                      : "Not available"}
-                  </p>
-
-                  <p className="mt-1 text-xs text-gray-500">
-                    {selectedRestaurant.reservationSlotMinutes} minute slots ·{" "}
-                    {selectedRestaurant.reservationAdvanceDays} days advance
-                    booking
-                  </p>
-                </div>
-
-                <div className="rounded-2xl bg-gray-50 p-4">
-                  <p className="text-sm font-semibold text-gray-700">Tables</p>
-
-                  <p className="mt-1 text-sm text-gray-600">
-                    {selectedRestaurant._count.tables} table
-                    {selectedRestaurant._count.tables === 1 ? "" : "s"}
-                  </p>
-                </div>
-
-                <div className="rounded-2xl bg-gray-50 p-4">
-                  <p className="text-sm font-semibold text-gray-700">
-                    Reservations
-                  </p>
-
-                  <p className="mt-1 text-sm text-gray-600">
-                    {selectedRestaurant._count.reservations} reservation
-                    {selectedRestaurant._count.reservations === 1 ? "" : "s"}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
+              </article>
+            );
+          })}
         </div>
       )}
 
-      {actionModal && (
-        <div className="fixed inset-0 z-[9999] overflow-y-auto bg-black/40 p-4">
+      {modal ? (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4">
           <div
             role="dialog"
             aria-modal="true"
-            aria-labelledby="restaurant-action-title"
-            className="mx-auto mt-24 max-w-lg rounded-3xl bg-white p-6 shadow-2xl"
+            className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl dark:bg-gray-900"
           >
-            <div className="mb-4 flex items-start gap-3">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gray-100">
-                <ShieldAlert className="h-6 w-6 text-gray-700" />
-              </div>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+              {formatStatusLabel(modal.action)} Restaurant
+            </h3>
 
-              <div>
-                <h3 id="restaurant-action-title" className="text-xl font-bold text-gray-950">
-                  {actionTitle(actionModal.action)}
-                </h3>
+            <p className="mt-1 text-sm text-gray-500">
+              {modal.restaurant.name}
+            </p>
 
-                <p className="mt-1 text-sm leading-6 text-gray-500">
-                  Restaurant:{" "}
-                  <span className="font-semibold text-gray-900">
-                    {actionModal.restaurant.name}
-                  </span>
-                </p>
-              </div>
-            </div>
-
-            {(actionModal.action === "REJECT" ||
-              actionModal.action === "SUSPEND") && (
-              <div className="mb-5">
-                <label className="mb-1 block text-sm font-medium text-gray-700">
+            {modal.action === "REJECT" ||
+            modal.action === "SUSPEND" ? (
+              <div className="mt-5">
+                <label
+                  htmlFor="admin-restaurant-action-reason"
+                  className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                >
                   Reason *
                 </label>
 
                 <textarea
+                  id="admin-restaurant-action-reason"
                   value={reason}
-                  maxLength={MAX_ACTION_REASON_LENGTH}
                   onChange={(event) =>
                     setReason(event.target.value)
                   }
-                  className="min-h-28 w-full rounded-2xl border border-gray-300 px-4 py-3 text-sm outline-none focus:border-black"
+                  maxLength={MAX_REASON}
+                  className="min-h-28 w-full rounded-xl border border-gray-300 p-3 text-sm outline-none focus:border-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
                   placeholder="Enter the reason for this action."
                 />
 
                 <p className="mt-1 text-right text-xs text-gray-400">
-                  {reason.length}/{MAX_ACTION_REASON_LENGTH}
+                  {reason.length}/{MAX_REASON}
                 </p>
               </div>
+            ) : (
+              <p className="mt-5 rounded-xl bg-gray-50 p-4 text-sm text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                The vendor will be notified after this action.
+              </p>
             )}
 
-            {actionModal.action !== "REJECT" &&
-              actionModal.action !== "SUSPEND" && (
-                <p className="mb-5 rounded-2xl bg-gray-50 p-4 text-sm leading-6 text-gray-600">
-                  The vendor will be notified after this action is completed.
-                </p>
-              )}
-
-            <div className="flex justify-end gap-3">
+            <div className="mt-5 flex justify-end gap-3">
               <button
                 type="button"
                 onClick={() => {
-                  setActionModal(null);
+                  setModal(null);
                   setReason("");
                 }}
-                className="rounded-full border border-gray-300 px-5 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-100"
+                className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
               >
                 Cancel
               </button>
 
               <button
                 type="button"
-                onClick={() =>
-                  runAction(actionModal.restaurant, actionModal.action)
-                }
                 disabled={
-                  processingId === actionModal.restaurant.id ||
-                  ((actionModal.action === "REJECT" ||
-                    actionModal.action === "SUSPEND") &&
+                  processingId === modal.restaurant.id ||
+                  ((modal.action === "REJECT" ||
+                    modal.action === "SUSPEND") &&
                     !reason.trim())
                 }
-                className="rounded-full bg-black px-5 py-2.5 text-sm font-semibold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={executeAction}
+                className="rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {processingId === actionModal.restaurant.id
+                {processingId === modal.restaurant.id
                   ? "Processing..."
-                  : actionButtonText(actionModal.action)}
+                  : "Confirm"}
               </button>
             </div>
           </div>
         </div>
-      )}
+      ) : null}
     </div>
+  );
+}
+
+function Stat({
+  value,
+  label,
+}: {
+  value: number;
+  label: string;
+}) {
+  return (
+    <div className="rounded-lg bg-gray-50 p-1 dark:bg-gray-900 2xl:rounded-xl 2xl:p-3">
+      <p className="text-sm font-semibold text-gray-800 dark:text-white/90 2xl:text-lg">
+        {value}
+      </p>
+      <p className="text-[9px] leading-3 text-gray-500 dark:text-gray-400 2xl:mt-1 2xl:text-xs 2xl:leading-normal">
+        {label}
+      </p>
+    </div>
+  );
+}
+
+function ActionLink({
+  href,
+  label,
+  className = "",
+  target,
+}: {
+  href: string;
+  label: string;
+  className?: string;
+  target?: string;
+}) {
+  const defaultClassName =
+    "inline-flex min-h-8 items-center justify-center rounded-lg border border-gray-300 bg-white px-1.5 py-1.5 text-center text-[10px] font-medium leading-tight text-gray-700 shadow-sm hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 2xl:px-4 2xl:py-2.5 2xl:text-sm";
+
+  return (
+    <Link
+      href={href}
+      target={target}
+      className={className || defaultClassName}
+    >
+      {label}
+    </Link>
+  );
+}
+
+function AdminButton({
+  title,
+  icon,
+  onClick,
+  danger = false,
+}: {
+  title: string;
+  icon: ReactNode;
+  onClick: () => void;
+  danger?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-label={title}
+      onClick={onClick}
+      className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-xs font-medium ${
+        danger
+          ? "border-red-200 bg-white text-red-600 hover:bg-red-50"
+          : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+      }`}
+    >
+      {icon}
+      {title}
+    </button>
   );
 }

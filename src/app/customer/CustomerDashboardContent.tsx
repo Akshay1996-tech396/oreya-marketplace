@@ -4,6 +4,10 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import CustomerBookingCancelButton from "../../components/customer/CustomerBookingCancelButton";
+import {
+  CustomerRestaurantReservationsSection,
+  type RestaurantReservation,
+} from "../../components/customer/CustomerRestaurantReservationsClient";
 import type { CustomerOrder, CustomerOrderItem } from "../../types/order";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -20,6 +24,7 @@ import {
   faChevronDown,
   faSlidersH,
   faXmark,
+  faUtensils,
 } from "@fortawesome/free-solid-svg-icons";
 
 function getStatusClass(status: string) {
@@ -114,6 +119,7 @@ interface DashboardData {
   };
   orders: CustomerOrder[];
   bookings: Booking[];
+  restaurantReservations: RestaurantReservation[];
 }
 
 export default function CustomerDashboardContent() {
@@ -128,6 +134,7 @@ export default function CustomerDashboardContent() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [orderStatusFilter, setOrderStatusFilter] = useState<string>("all");
   const [bookingStatusFilter, setBookingStatusFilter] = useState<string>("all");
+  const [restaurantStatusFilter, setRestaurantStatusFilter] = useState<string>("all");
   const [sortBy, setSortBy] = useState<string>("newest");
   const [showFilters, setShowFilters] = useState<boolean>(false);
   const [showSearch, setShowSearch] = useState<boolean>(false);
@@ -262,10 +269,64 @@ export default function CustomerDashboardContent() {
     return filtered;
   }, [data?.bookings, searchQuery, bookingStatusFilter, sortBy]);
 
+  const filteredRestaurantReservations = useMemo(() => {
+    if (!data?.restaurantReservations) return [];
+
+    let filtered = [...data.restaurantReservations];
+
+    if (searchQuery.trim()) {
+      const query = searchQuery.trim().toLowerCase();
+
+      filtered = filtered.filter((reservation) =>
+        reservation.id.toLowerCase().includes(query) ||
+        reservation.reservationCode.toLowerCase().includes(query) ||
+        reservation.restaurant.name.toLowerCase().includes(query) ||
+        [reservation.restaurant.area, reservation.restaurant.city]
+          .filter(Boolean)
+          .join(", ")
+          .toLowerCase()
+          .includes(query) ||
+        reservation.customerName?.toLowerCase().includes(query) ||
+        reservation.customerEmail?.toLowerCase().includes(query) ||
+        reservation.customerNote?.toLowerCase().includes(query)
+      );
+    }
+
+    if (restaurantStatusFilter !== "all") {
+      filtered = filtered.filter(
+        (reservation) => reservation.status === restaurantStatusFilter
+      );
+    }
+
+    switch (sortBy) {
+      case "newest":
+        filtered.sort(
+          (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+        break;
+      case "oldest":
+        filtered.sort(
+          (a, b) =>
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        );
+        break;
+      case "highest":
+        filtered.sort((a, b) => Number(b.amount || 0) - Number(a.amount || 0));
+        break;
+      case "lowest":
+        filtered.sort((a, b) => Number(a.amount || 0) - Number(b.amount || 0));
+        break;
+    }
+
+    return filtered;
+  }, [data?.restaurantReservations, searchQuery, restaurantStatusFilter, sortBy]);
+
   const clearFilters = () => {
     setSearchQuery("");
     setOrderStatusFilter("all");
     setBookingStatusFilter("all");
+    setRestaurantStatusFilter("all");
     setSortBy("newest");
   };
 
@@ -275,9 +336,10 @@ export default function CustomerDashboardContent() {
     if (searchQuery) count++;
     if (orderStatusFilter !== "all") count++;
     if (bookingStatusFilter !== "all") count++;
+    if (restaurantStatusFilter !== "all") count++;
     if (sortBy !== "newest") count++;
     return count;
-  }, [searchQuery, orderStatusFilter, bookingStatusFilter, sortBy]);
+  }, [searchQuery, orderStatusFilter, bookingStatusFilter, restaurantStatusFilter, sortBy]);
 
   if (loading) {
     return (
@@ -302,7 +364,7 @@ export default function CustomerDashboardContent() {
     return null;
   }
 
-  const { user, orders, bookings } = data;
+  const { user, orders, bookings, restaurantReservations } = data;
 
   const showBookings =
     selectedSection === "all" || selectedSection === "bookings";
@@ -310,9 +372,13 @@ export default function CustomerDashboardContent() {
   const showOrders =
     selectedSection === "all" || selectedSection === "orders";
 
+  const showRestaurantReservations =
+    selectedSection === "all" || selectedSection === "restaurant-reservations";
+
   // Get unique statuses for filters
   const orderStatuses = Array.from(new Set(orders.map(o => o.status)));
   const bookingStatuses = Array.from(new Set(bookings.map(b => b.status)));
+  const restaurantStatuses = Array.from(new Set(restaurantReservations.map(r => r.status)));
 
   return (
     <main className="min-h-screen bg-white text-black">
@@ -327,7 +393,7 @@ export default function CustomerDashboardContent() {
           </h1>
 
           <p className="mt-3 text-sm text-gray-500">
-            Welcome {user.name}. Track your orders and appointment bookings.
+            Welcome {user.name}. Track your orders, appointment bookings, and restaurant reservations.
           </p>
         </div>
 
@@ -359,7 +425,7 @@ export default function CustomerDashboardContent() {
               <button
                 onClick={() => setShowFilters(!showFilters)}
                 className={`inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium transition-all duration-300 ${
-                  showFilters || orderStatusFilter !== "all" || bookingStatusFilter !== "all"
+                  showFilters || orderStatusFilter !== "all" || bookingStatusFilter !== "all" || restaurantStatusFilter !== "all"
                     ? "bg-black text-white"
                     : "border border-gray-300 bg-white text-gray-700 hover:bg-gray-100"
                 }`}
@@ -407,11 +473,15 @@ export default function CustomerDashboardContent() {
             <div className="flex items-center gap-2 text-sm text-gray-500">
               <FontAwesomeIcon icon={faSlidersH} className="h-3.5 w-3.5" />
               <span className="font-medium">
-                {showOrders && showBookings 
-                  ? `${filteredOrders.length + filteredBookings.length} results`
-                  : showOrders 
-                    ? `${filteredOrders.length} orders`
-                    : `${filteredBookings.length} bookings`
+                {showOrders && showBookings && showRestaurantReservations
+                  ? `${filteredOrders.length + filteredBookings.length + filteredRestaurantReservations.length} results`
+                  : showOrders && showBookings
+                    ? `${filteredOrders.length + filteredBookings.length} results`
+                    : showOrders
+                      ? `${filteredOrders.length} orders`
+                      : showBookings
+                        ? `${filteredBookings.length} bookings`
+                        : `${filteredRestaurantReservations.length} restaurant reservations`
                 }
               </span>
             </div>
@@ -429,7 +499,7 @@ export default function CustomerDashboardContent() {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search by ID, product name, or vendor..."
+                  placeholder="Search by ID, product, service, restaurant, or reservation..."
                   className="w-full rounded-full border border-gray-300 bg-gray-50 py-3 pl-12 pr-4 text-sm transition-all duration-300 focus:border-black focus:outline-none focus:ring-2 focus:ring-black/10 focus:bg-white"
                   autoFocus
                 />
@@ -481,6 +551,26 @@ export default function CustomerDashboardContent() {
                     >
                       <option value="all">All Statuses</option>
                       {bookingStatuses.map((status) => (
+                        <option key={status} value={status}>
+                          {status.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (l) => l.toUpperCase())}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {showRestaurantReservations && (
+                  <div>
+                    <label className="mb-2 flex items-center gap-2 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Restaurant Reservation Status
+                    </label>
+                    <select
+                      value={restaurantStatusFilter}
+                      onChange={(e) => setRestaurantStatusFilter(e.target.value)}
+                      className="w-full rounded-full border border-gray-300 bg-white px-4 py-2.5 text-sm transition-all duration-300 focus:border-black focus:outline-none focus:ring-2 focus:ring-black/10 appearance-none cursor-pointer"
+                    >
+                      <option value="all">All Statuses</option>
+                      {restaurantStatuses.map((status) => (
                         <option key={status} value={status}>
                           {status.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (l) => l.toUpperCase())}
                         </option>
@@ -541,6 +631,17 @@ export default function CustomerDashboardContent() {
                       <button
                         onClick={() => setBookingStatusFilter("all")}
                         className="text-purple-400 transition-colors duration-300 hover:text-purple-600"
+                      >
+                        <FontAwesomeIcon icon={faTimes} className="h-2.5 w-2.5" />
+                      </button>
+                    </span>
+                  )}
+                  {restaurantStatusFilter !== "all" && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 text-amber-700 px-3 py-1 text-xs">
+                      Restaurant: {restaurantStatusFilter.replace(/_/g, " ").toLowerCase()}
+                      <button
+                        onClick={() => setRestaurantStatusFilter("all")}
+                        className="text-amber-500 transition-colors duration-300 hover:text-amber-700"
                       >
                         <FontAwesomeIcon icon={faTimes} className="h-2.5 w-2.5" />
                       </button>
@@ -639,6 +740,28 @@ export default function CustomerDashboardContent() {
                 }`}
               >
                 {bookings.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => handleSectionChange("restaurant-reservations")}
+              disabled={sectionLoading}
+              className={`inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium transition-all duration-300 ${
+                selectedSection === "restaurant-reservations"
+                  ? "bg-black text-white"
+                  : "border border-gray-300 bg-white text-gray-700 hover:bg-gray-100"
+              } ${sectionLoading ? "opacity-50 cursor-not-allowed" : ""}`}
+            >
+              <FontAwesomeIcon icon={faUtensils} className="h-3.5 w-3.5" />
+              Restaurant Reservations
+              <span
+                className={`rounded-full px-2 py-0.5 text-[10px] transition-all duration-300 ${
+                  selectedSection === "restaurant-reservations"
+                    ? "bg-white/20 text-white"
+                    : "bg-gray-100 text-gray-500"
+                }`}
+              >
+                {restaurantReservations.length}
               </span>
             </button>
           </div>
@@ -873,6 +996,33 @@ export default function CustomerDashboardContent() {
                 })}
               </div>
             )}
+          </section>
+        )}
+
+        {/* ============================================================
+            MY RESTAURANT RESERVATIONS
+            ============================================================ */}
+        {showRestaurantReservations && !sectionLoading && (
+          <section className={showBookings ? "mt-14" : ""}>
+            <div className="mb-5 flex items-center justify-between gap-4">
+              <div>
+                <h2 className="font-heading text-2xl uppercase">
+                  My Restaurant Reservations
+                </h2>
+
+                <p className="mt-1 text-sm text-gray-500">
+                  {filteredRestaurantReservations.length} restaurant reservations
+                  {searchQuery && ` (filtered from ${restaurantReservations.length})`}
+                </p>
+              </div>
+            </div>
+
+            <CustomerRestaurantReservationsSection
+              initialReservations={restaurantReservations}
+              searchQuery={searchQuery}
+              statusFilter={restaurantStatusFilter}
+              sortBy={sortBy}
+            />
           </section>
         )}
 

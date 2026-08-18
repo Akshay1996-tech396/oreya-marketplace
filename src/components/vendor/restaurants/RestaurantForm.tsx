@@ -20,6 +20,7 @@ type RestaurantSpecificationRow = {
 
 type RestaurantFormData = {
   id?: string;
+  vendorId?: string | null;
   name?: string;
   description?: string | null;
   shortDescription?: string | null;
@@ -89,6 +90,11 @@ type RestaurantFormProps = {
   vendorAddress?: VendorAddressData | null;
   maxImageUploadSizeMb?: number;
   contentLimits: ContentLimits;
+  saveEndpoint?: string;
+  redirectPath?: string;
+  vendorId?: string;
+  vendorOptions?: Array<{ id: string; businessName: string; status: string }>;
+  allowDelete?: boolean;
 };
 
 const ACCEPTED_IMAGE_TYPES = new Set([
@@ -261,6 +267,11 @@ export default function RestaurantForm({
   vendorAddress,
   maxImageUploadSizeMb,
   contentLimits,
+  saveEndpoint,
+  redirectPath = "/vendor/restaurants",
+  vendorId,
+  vendorOptions = [],
+  allowDelete = true,
 }: RestaurantFormProps) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -277,6 +288,7 @@ export default function RestaurantForm({
     maximumImageUploadSizeMb * 1024 * 1024;
 
   const [saving, setSaving] = useState(false);
+  const [selectedVendorId, setSelectedVendorId] = useState(vendorId || initialData?.vendorId || "");
   const [deleting, setDeleting] = useState(false);
   const [uploadingImages, setUploadingImages] = useState(false);
   const [isDraggingImages, setIsDraggingImages] = useState(false);
@@ -841,12 +853,20 @@ export default function RestaurantForm({
         reservationCancellationNote: form.reservationCancellationNote.trim(),
 
         status,
+        ...(selectedVendorId ? { vendorId: selectedVendorId } : {}),
       };
 
+      if (mode === "create" && vendorOptions.length > 0 && !selectedVendorId) {
+        alert("Please select a vendor for this restaurant.");
+        setSaving(false);
+        return;
+      }
+
       const url =
-        mode === "create"
+        saveEndpoint ||
+        (mode === "create"
           ? "/api/vendor/restaurants"
-          : `/api/vendor/restaurants/${initialData?.id}`;
+          : `/api/vendor/restaurants/${initialData?.id}`);
 
       const response = await fetch(url, {
         method: mode === "create" ? "POST" : "PATCH",
@@ -864,7 +884,7 @@ export default function RestaurantForm({
         return;
       }
 
-      router.push("/vendor/restaurants");
+      router.push(redirectPath);
       router.refresh();
     } catch (error) {
       console.error("RESTAURANT_FORM_SAVE_ERROR", error);
@@ -902,7 +922,7 @@ export default function RestaurantForm({
         return;
       }
 
-      router.push("/vendor/restaurants");
+      router.push(redirectPath);
       router.refresh();
     } catch (error) {
       console.error("RESTAURANT_DELETE_ERROR", error);
@@ -949,6 +969,30 @@ export default function RestaurantForm({
           </h3>
 
           <div className="grid gap-4 md:grid-cols-2">
+            {vendorOptions.length > 0 && (
+              <div className="md:col-span-2">
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  Vendor *
+                </label>
+                <select
+                  value={selectedVendorId}
+                  onChange={(event) => setSelectedVendorId(event.target.value)}
+                  disabled={mode === "edit"}
+                  className="h-11 w-full rounded-xl border border-gray-300 bg-white px-4 text-sm outline-none focus:border-black disabled:bg-gray-100"
+                >
+                  <option value="">Select vendor</option>
+                  {vendorOptions.map((vendor) => (
+                    <option key={vendor.id} value={vendor.id}>
+                      {vendor.businessName}{vendor.status !== "APPROVED" ? ` (${vendor.status})` : ""}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-gray-500">
+                  The restaurant will be associated with this vendor.
+                </p>
+              </div>
+            )}
+
             <div className="md:col-span-2">
               <label className="mb-1 block text-sm font-medium text-gray-700">
                 Restaurant Name *
@@ -1911,7 +1955,7 @@ export default function RestaurantForm({
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 pt-6">
           <div>
-            {mode === "edit" && (
+            {mode === "edit" && allowDelete && (
               <button
                 type="button"
                 onClick={handleDelete}
@@ -1926,7 +1970,7 @@ export default function RestaurantForm({
           <div className="flex flex-wrap gap-3">
             <button
               type="button"
-              onClick={() => router.push("/vendor/restaurants")}
+              onClick={() => router.push(redirectPath)}
               className="rounded-full border border-gray-300 px-5 py-2.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-100"
             >
               Cancel

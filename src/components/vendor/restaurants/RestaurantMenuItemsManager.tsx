@@ -45,6 +45,7 @@ type RestaurantMenuItemsManagerProps = {
   restaurant: RestaurantSummary;
   initialMenuItems: RestaurantMenuItemSummary[];
   maxImageUploadSizeMb?: number;
+  apiBasePath?: string;
 };
 
 type MessageState = {
@@ -329,6 +330,7 @@ export default function RestaurantMenuItemsManager({
   restaurant,
   initialMenuItems,
   maxImageUploadSizeMb,
+  apiBasePath = "/api/vendor/restaurants",
 }: RestaurantMenuItemsManagerProps) {
   const [menuItems, setMenuItems] = useState<
     RestaurantMenuItemSummary[]
@@ -384,7 +386,7 @@ export default function RestaurantMenuItemsManager({
     async function loadImageUploadSetting() {
       try {
         const response = await fetch(
-          `/api/vendor/restaurants/${restaurant.id}/menu-items`,
+          `${apiBasePath}/${restaurant.id}/menu-items`,
           {
             method: "GET",
             credentials: "include",
@@ -816,8 +818,8 @@ export default function RestaurantMenuItemsManager({
       setMessage(null);
 
       const endpoint = editingMenuItemId
-        ? `/api/vendor/restaurants/${restaurant.id}/menu-items/${editingMenuItemId}`
-        : `/api/vendor/restaurants/${restaurant.id}/menu-items`;
+        ? `${apiBasePath}/${restaurant.id}/menu-items/${editingMenuItemId}`
+        : `${apiBasePath}/${restaurant.id}/menu-items`;
 
       const response = await fetch(
         endpoint,
@@ -942,7 +944,7 @@ export default function RestaurantMenuItemsManager({
       setMessage(null);
 
       const response = await fetch(
-        `/api/vendor/restaurants/${restaurant.id}/menu-items/${menuItemId}`,
+        `${apiBasePath}/${restaurant.id}/menu-items/${menuItemId}`,
         {
           method: "DELETE",
           credentials: "include",
